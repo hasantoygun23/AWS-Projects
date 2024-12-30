@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  This CFN template create ASG and ALB with ASG Target Tracking Policy via CloudFormation template. 
+Parameters:
+  myVPC:
+    Description: Choose your vpc
+    Type: AWS::EC2::VPC::Id
+
+  myEnv:
+    Description: Choose your env
+    Type: String
+    Default: prod
+    AllowedValues: 
+      - prod
+      - test
+
+  myInstanceType:
+    Description: Choose your instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues: 
+      - t2.micro
+      - t3.micro
+      - t2.nano
+
+  myKeyPair:
+    Description: Choose your keypair
+    Type: AWS::EC2::KeyPair::KeyName
+
+  mySubnets:
+    Description: Choose your subnets
+    Type: List<AWS::EC2::Subnet::Id>
+
+Mappings:
+  myRegionImageMap:
+    us-east-1:
+      prod: ami-0453ec754f44f9a4a
+      test: ami-0ed83e7a78a23014e
+    us-east-2:
+      prod: ami-0c80e2b6ccb9ad6d1
+      test: ami-0a9f08a6603f3338e
+    us-west-1:
+      prod: ami-038bba9a164eb3dc1
+      test: ami-0abe6f915c415296f
+  
+Resources:
+  mySecGrp:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ssh and http # Required
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref myVPC
+  
+  myTargetGrp:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref myVPC
+   
+  myLT:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !FindInMap
+          - myRegionImageMap
+          - !Ref "AWS::Region"
+          - !Ref myEnv
+        InstanceType: !Ref myInstanceType
+        KeyName: !Ref myKeyPair
+        SecurityGroupIds:
+          - !Ref mySecGrp
+        UserData: !Base64 |
+          #!/bin/bash
+          #update os
+          dnf update -y
+          #install apache server
+          dnf install -y httpd
+          # get private ip address of ec2 instance using instance metadata
+          TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` \
+          && PRIVATE_IP=`curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4`
+          # get public ip address of ec2 instance using instance metadata
+          TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` \
+          && PUBLIC_IP=`curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4` 
+          # get date and time of server
+          DATE_TIME=`date`
+          # set all permissions
+          chmod -R 777 /var/www/html
+          # create a custom index.html file
+          echo "<html>
+              <head>
+              <title> Application Load Balancer</title>
+              </head>
+              <body>
+                  <h1>Testing Application Load Balancer</h1>
+                  <h2>Congratulations! You have created an instance from Launch Template</h2>
+                  <h3>This web server is launched from the launch template by Oktay via CFN</h3>
+                  <p>This instance is created at <b>$DATE_TIME</b></p>
+                  <p>Private IP address of this instance is <b>$PRIVATE_IP</b></p>
+                  <p>Public IP address of this instance is <b>$PUBLIC_IP</b></p>
+              </body>
+              </html>" > /var/www/html/index.html
+              # start apache server
+              systemctl start httpd
+              systemctl enable httpd
+
+  myALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: okt-app-alb
+      SecurityGroups: 
+      - !Ref mySecGrp
+      Subnets: !Ref mySubnets
+      Type: application
+
+  myListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions: 
+        - TargetGroupArn: !GetAtt myTargetGrp.TargetGroupArn
+          Type: forward
+      LoadBalancerArn: !GetAtt myALB.LoadBalancerArn
+      Port: 80
+      Protocol: HTTP
+  
+  myASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: okt-alb-19
+      DesiredCapacity: 2
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchTemplate: 
+        LaunchTemplateId: !GetAtt myLT.LaunchTemplateId
+        Version: !GetAtt myLT.DefaultVersionNumber
+      MaxSize: 3
+      MinSize: 2
+      TargetGroupARNs: 
+      - !GetAtt myTargetGrp.TargetGroupArn
+      VPCZoneIdentifier: !Ref mySubnets
+
+  myASGPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref myASG
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration: 
+        PredefinedMetricSpecification: 
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60
+
+Outputs:
+  ShowDNS:
+    Description: DNS of ALB
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt myALB.DNSName
+

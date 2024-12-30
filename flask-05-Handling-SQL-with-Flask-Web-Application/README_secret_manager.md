@@ -101,6 +101,6 @@ git clone [your public repo]
 
 - Run the code and show the connection between RDS database and Flask
 
-http://<PublicIpofınstance>:8080
+http://<PublicIpofınstance>:80
 
 - Terminate the Instance and the Secret

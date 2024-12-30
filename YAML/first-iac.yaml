@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  Bu template SSH ile baglantiyi mumkun kilan bir instance yaratan templatedir. ami-id'si bile hardcoded bir sekilde yazilmistir. Daha sonra isterseniz bunu degistirebilirsiniz.   
+
+Resources:
+  AslanFirstCFNInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-06b21ccaeff8cd686
+      InstanceType: t2.micro
+      KeyName: firstkey # Your key-pair without .pem
+      SecurityGroups: 
+        - !Ref AslanFirstCFNSG
+      Tags: 
+        - Key: Name
+          Value: Aslan-iac-cfn-instance
+          
+  AslanFirstCFNSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Bu guvenlik grubu SSH (22) portunu acar. # Required
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 22 
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
