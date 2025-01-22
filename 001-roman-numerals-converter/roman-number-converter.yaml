@@ -1,11 +1,11 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: |
-  Cloudformation template  for roman....
+  Cloudformation Template  for Roman Numerals Conventer Application.
 Parameters:
   KeyName:
-    Description: Select your keypair
+    Description: Choose your own  keypair. 
     Type: AWS::EC2::KeyPair::KeyName
-    Default: okt-aws
+    Default: firstkey.pem
 
   LatestAmiId:
     Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
@@ -38,19 +38,24 @@ Resources:
         - !Ref WebSecurityGroup
       Tags:
         - Key: Name
-          Value: !Sub Web Server of ${AWS::StackName}
-      UserData: 
-       !Base64 |
+          Value: !Sub Web Server of ${AWS::StackName} Stack 
+      UserData:  !Base64 |
         #! /bin/bash
-          yum update -y
-          yum install python3
-          pip3 install flask
-          yum install git -y
-          cd /home/ec2-user
-          wget -P templates https://raw.githubusercontent.com/hasantoygun23/AWS-Projects/refs/heads/main/001-roman-numerals-converter/templates/index.html
-          wget  https://raw.githubusercontent.com/hasantoygun23/AWS-Projects/refs/heads/main/001-roman-numerals-converter/templates/result.html
-          wget  https://raw.githubusercontent.com/hasantoygun23/AWS-Projects/refs/heads/main/001-roman-numerals-converter/roman-numerals-converter-app.py
-          python3 roman-numerals-convert-app.py
+        yum update -y
+        yum install python3
+        pip3 install flask
+        yum install git -y
+        cd /home/ec2-user
+        wget  https://raw.githubusercontent.com/hasantoygun23/AWS-Projects/refs/heads/main/001-roman-numerals-converter/roman-numerals-converter-app.py
+        python3 roman-numerals-convert-app.py
+        mkdir templates 
+        cd templates 
+        wget  https://raw.githubusercontent.com/hasantoygun23/AWS-Projects/refs/heads/main/001-roman-numerals-converter/templates/index.html
+        wget  https://raw.githubusercontent.com/hasantoygun23/AWS-Projects/refs/heads/main/001-roman-numerals-converter/templates/result.html
+        wget  https://raw.githubusercontent.com/hasantoygun23/AWS-Projects/refs/heads/main/001-roman-numerals-converter/roman-numerals-converter-app.py
+        python3 roman-numerals-convert-app.py
+        cd ..
+
 Outputs:
    WebSiteURL: 
     Value: !Sub
